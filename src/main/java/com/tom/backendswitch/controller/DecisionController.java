@@ -15,19 +15,27 @@ import java.util.Map;
 @RestController
 public class DecisionController {
 
-    @Autowired
-    private DecisionService decisionService;
+    private final DecisionService decisionService;
 
     private static final String JWT_HEADER = "X-Auth-Token";
+    public static final String LOCATION = "Location";
+
+    public DecisionController(DecisionService decisionService) {
+        this.decisionService = decisionService;
+    }
 
     @PostMapping(path = "/decide")
     public void decide(@RequestHeader(JWT_HEADER) String token, @RequestBody OriginalRequest originalRequest, HttpServletResponse response) throws Exception {
         Map<String, String> claims = decisionService.extractClaims(token);
 
-        Pattern pattern = decisionService.matchPattern(claims);
+        Pattern pattern = decisionService.matchPattern(originalRequest.getUrl());
+        if(pattern != null) {
+            String result = decisionService.evaluateLogic(pattern);
+            response.setHeader(LOCATION, !result.isBlank() ? result : originalRequest.getUrl());
+        } else {
+            response.setHeader(LOCATION, originalRequest.getUrl());
+        }
 
-        String result = decisionService.evaluateLogic(pattern);
         response.setStatus(HttpServletResponse.SC_TEMPORARY_REDIRECT);
-        response.setHeader("Location", !result.isBlank() ? result : originalRequest.getUrl());
     }
 }
