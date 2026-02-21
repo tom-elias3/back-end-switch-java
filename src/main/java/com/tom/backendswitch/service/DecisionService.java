@@ -56,13 +56,10 @@ public class DecisionService {
     }
 
     public Pattern matchPattern(String originalUrl) {
-        for(Pattern pattern : patterns.values()) {
-            if(this.matchUrl(originalUrl, pattern)) {
-                return pattern;
-            }
-        }
-
-        return null;
+        return patterns.values().parallelStream()
+                .filter(pattern -> matchUrl(originalUrl, pattern))
+                .min(Comparator.comparingInt(Pattern::getId))
+                .orElse(null);
     }
 
     private boolean matchUrl(String url, Pattern pattern) {
