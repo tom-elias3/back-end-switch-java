@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(java:*)",
+      "Bash(cd F:/task/back-end-switch && ./gradlew build --stacktrace 2>&1)",
+      "Bash(cd F:/task/back-end-switch && ./gradlew build 2>&1)",
+      "WebSearch"
+    ]
+  }
+}

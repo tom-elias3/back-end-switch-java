@@ -1,4 +1,4 @@
-<h1>Back-End Switch</h1>
+<h1>Back-End Switch - JAVA Edition</h1>
 (sounds like "Bait & Switch")<br>
 
 similar to Envoy Proxy/Kong Gateway/Traefik/Istio or Linkerd (service mesh) - specialized L7 reverse proxy / traffic router
@@ -16,8 +16,8 @@ multiple of: (order matters - from more specific to less specific)
 
 saved locally in properties file, or in database. loaded on app start and kept in static memory (changes require restart)
 
-user logs in
-user makes a request -> forwarded to /decide
-evaluate patterns in order, to match the request
-extract request data according to condition type (lazy evaluation for payload)
-evaluate condition and decide on destination
+user logs in<br>
+user makes a request -> forwarded to /decide<br>
+evaluate patterns in order, to match the request<br>
+extract request data according to condition type (lazy evaluation for payload)<br>
+evaluate condition and decide on destination<br>
