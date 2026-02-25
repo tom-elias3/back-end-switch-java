@@ -37,7 +37,7 @@ Patterns are loaded once at startup via `@PostConstruct` into a static `TreeMap`
 **Logic expressions:**
 The `expression` package implements a recursive Interpreter pattern. `ExpressionParser.parse(logic, context)` builds an `Expression` tree from strings like `(({param.operation} <= 3) AND ({claim.id} == 1))`. Variables in `{...}` are resolved from the context map at parse time. The context map merges JWT claims (keyed as `claim.<name>`) and URL query params (keyed as `param.<name>`).
 
-Supported operators: `AND`, `OR`, `==`, `<`, `<=`, `>`, `>=`. Each maps to a concrete `Expression` subclass with a `boolean evaluate()` method.
+Supported operators: `AND`, `OR`, `==`, `!=`, `<`, `<=`, `>`, `>=`. Each maps to a concrete `Expression` subclass with a `boolean evaluate()` method. Numeric comparison operators throw `RuntimeException` (wrapping `NumberFormatException`) if either operand cannot be parsed as a `Double`.
 
 **Package structure:**
 - `controller` — `DecisionController` (single `POST /decide` endpoint)
