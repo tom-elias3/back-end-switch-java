@@ -1,10 +1,13 @@
 package com.tom.backendswitch.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.tom.backendswitch.model.Pattern;
 import jakarta.annotation.PostConstruct;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -46,20 +49,30 @@ public class DecisionService {
         }
     }
 
-    public Map<String, String> extractClaims(String token) {
+    public Map<String, String> extractClaims(String token) throws JsonProcessingException {
+        if(!token.startsWith("Bearer ")) {
+            return null;
+        }
+
         String claimsJson = new String(
                 Base64.getUrlDecoder().decode(token.split("\\.")[1]),
                 StandardCharsets.UTF_8
         );
 
-        return null;
+        Map<String, String> claims = new ObjectMapper().readValue(claimsJson, new TypeReference<Map<String, String>>() {});
+        return claims;
     }
 
     public Pattern matchPattern(String originalUrl) {
-        return patterns.values().parallelStream()
+        Pattern found = patterns.values().parallelStream()
                 .filter(pattern -> matchUrl(originalUrl, pattern))
                 .min(Comparator.comparingInt(Pattern::getId))
                 .orElse(null);
+
+        //if(found != null) {
+
+        //}
+        return found;
     }
 
     private boolean matchUrl(String url, Pattern pattern) {
@@ -70,7 +83,7 @@ public class DecisionService {
                 return false;
             }
 
-            if(i+1 < tokens.length) {
+            if(i+1 <= tokens.length) {
                 int foundIndex = remaining.indexOf(tokens[i+1]);
                 if(foundIndex > -1) {
                     remaining = remaining.substring(foundIndex);
@@ -82,7 +95,7 @@ public class DecisionService {
         return true;
     }
 
-    public String evaluateLogic(Pattern pattern) {
+    public String evaluateLogic(Pattern pattern, Map<String, String> claims) {
 
         return pattern.getDestination();
     }
