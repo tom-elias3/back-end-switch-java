@@ -26,12 +26,13 @@ public class DecisionController {
 
     @PostMapping(path = "/decide")
     public void decide(@RequestHeader(JWT_HEADER) String token, @RequestBody OriginalRequest originalRequest, HttpServletResponse response) throws Exception {
-        Pattern pattern = decisionService.matchPattern(originalRequest.getUrl());
+        Pattern pattern = decisionService.matchPattern(originalRequest);
         if(pattern != null) {
             Map<String, String> claims = decisionService.extractClaims(token);
+            Map<String, String> params = decisionService.extractRequestParams(originalRequest.getUrl());
 
-            String result = decisionService.evaluateLogic(pattern, claims);
-            response.setHeader(LOCATION, !result.isBlank() ? result : originalRequest.getUrl());
+            String result = decisionService.evaluateLogic(pattern, claims, params);
+            response.setHeader(LOCATION, result != null ? result : originalRequest.getUrl());
         } else {
             response.setHeader(LOCATION, originalRequest.getUrl());
         }

@@ -1,6 +1,8 @@
 package com.tom.backendswitch.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.tom.backendswitch.expression.ExpressionParser;
+import com.tom.backendswitch.model.OriginalRequest;
 import com.tom.backendswitch.model.Pattern;
 import jakarta.annotation.PostConstruct;
 import org.springframework.http.HttpMethod;
@@ -51,7 +53,7 @@ public class DecisionService {
 
     public Map<String, String> extractClaims(String token) throws JsonProcessingException {
         if(!token.startsWith("Bearer ")) {
-            return null;
+            return Collections.emptyMap();
         }
 
         String claimsJson = new String(
@@ -63,19 +65,36 @@ public class DecisionService {
         return claims;
     }
 
-    public Pattern matchPattern(String originalUrl) {
+    public Map<String, String> extractRequestParams(String url) {
+        final String qmark = "?";
+        final String equalsSign = "=";
+        Map<String, String> result = new HashMap<>();
+
+        if(url != null && !url.isBlank() && url.indexOf(qmark) > 0) {
+            String queryParams = url.substring(url.indexOf(qmark) + 1);
+            String[] queryParamTokens = queryParams.split("&");
+            for(String param : queryParamTokens) {
+                if(param != null && !param.isBlank() && param.indexOf(equalsSign) > 0) {
+                    String[] tokens = param.split(equalsSign);
+                    result.put(tokens[0], tokens[1]);
+                }
+            }
+        }
+
+        return result;
+    }
+
+    public Pattern matchPattern(OriginalRequest originalUrl) {
         Pattern found = patterns.values().parallelStream()
-                .filter(pattern -> matchUrl(originalUrl, pattern))
+                .filter(pattern -> matchUrl(originalUrl.getMethod(), originalUrl.getUrl(), pattern))
                 .min(Comparator.comparingInt(Pattern::getId))
                 .orElse(null);
-
-        //if(found != null) {
-
-        //}
         return found;
     }
 
-    private boolean matchUrl(String url, Pattern pattern) {
+    private boolean matchUrl(HttpMethod method, String url, Pattern pattern) {
+        if(!method.equals(pattern.getMethod())) return false;
+
         String[] tokens = pattern.getUrl().split("\\*");
         String remaining = url;
         for (int i=0; i < tokens.length; i++) {
@@ -83,7 +102,7 @@ public class DecisionService {
                 return false;
             }
 
-            if(i+1 <= tokens.length) {
+            if(i+1 < tokens.length) {
                 int foundIndex = remaining.indexOf(tokens[i+1]);
                 if(foundIndex > -1) {
                     remaining = remaining.substring(foundIndex);
@@ -92,12 +111,16 @@ public class DecisionService {
                 }
             }
         }
+
         return true;
     }
 
-    public String evaluateLogic(Pattern pattern, Map<String, String> claims) {
+    public String evaluateLogic(Pattern pattern, Map<String, String> claims, Map<String, String> params) {
+        Map<String, String> context = new HashMap<>();
+        claims.forEach((k, v) -> context.put("claim." + k, v));
+        params.forEach((k, v) -> context.put("param." + k, v));
 
-        return pattern.getDestination();
+        boolean result = ExpressionParser.parse(pattern.getLogic(), context).evaluate();
+        return result ? pattern.getDestination() : null;
     }
-
 }
