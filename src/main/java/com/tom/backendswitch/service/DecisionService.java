@@ -1,6 +1,7 @@
 package com.tom.backendswitch.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.tom.backendswitch.expression.ExpressionParser;
 import com.tom.backendswitch.model.OriginalRequest;
 import com.tom.backendswitch.model.Pattern;
@@ -66,18 +67,23 @@ public class DecisionService {
         }
     }
 
-    public Map<String, Object> extractClaims(String token) throws JsonProcessingException {
+    public Map<String, Object> extractClaims(String token) {
         if(token == null || token.isBlank() || !token.startsWith("Bearer ")) {
             return Collections.emptyMap();
         }
 
-        String claimsJson = new String(
-                Base64.getUrlDecoder().decode(token.split("\\.")[1]),
-                StandardCharsets.UTF_8
-        );
+        try {
+            String claimsJson = new String(
+                    Base64.getUrlDecoder().decode(token.split("\\.")[1]),
+                    StandardCharsets.UTF_8
+            );
 
-        Map<String, Object> claims = new ObjectMapper().readValue(claimsJson, new TypeReference<Map<String, Object>>() {});
-        return claims;
+            Map<String, Object> claims = new ObjectMapper().readValue(claimsJson, new TypeReference<Map<String, Object>>() {
+            });
+            return claims;
+        } catch(JsonProcessingException jme) {
+            return Collections.emptyMap();
+        }
     }
 
     public Map<String, String> extractRequestParams(String url) {
