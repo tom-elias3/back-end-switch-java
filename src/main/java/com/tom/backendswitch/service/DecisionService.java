@@ -57,8 +57,9 @@ public class DecisionService {
         if(pattern != null) {
             Map<String, Object> claims = this.extractClaims(token);
             Map<String, String> params = this.extractRequestParams(originalRequest.getUrl());
+            Map<String, String> headers = originalRequest.getHeaders();
 
-            String result = this.evaluateLogic(pattern, claims, params);
+            String result = this.evaluateLogic(pattern, claims, params, headers);
             return result;
         } else {
             return null;
@@ -129,7 +130,7 @@ public class DecisionService {
         return true;
     }
 
-    public String evaluateLogic(Pattern pattern, Map<String, Object> claims, Map<String, String> params) {
+    public String evaluateLogic(Pattern pattern, Map<String, Object> claims, Map<String, String> params, Map<String, String> headers) {
         if(pattern.getLogic().startsWith(RANDOM)) {
             return this.probabilityDecision(pattern);
         }
@@ -137,6 +138,9 @@ public class DecisionService {
         Map<String, String> context = new HashMap<>();
         claims.forEach((k, v) -> context.put("claim." + k, v.toString()));
         params.forEach((k, v) -> context.put("param." + k, v));
+        if (headers != null) {
+            headers.forEach((k, v) -> context.put("header." + k, v));
+        }
 
         boolean result = ExpressionParser.parse(pattern.getLogic(), context).evaluate();
         return result ? pattern.getDestination() : null;
