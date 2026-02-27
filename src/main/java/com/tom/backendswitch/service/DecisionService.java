@@ -106,6 +106,10 @@ public class DecisionService {
         return result;
     }
 
+    public Map<Integer, Pattern> getPatterns() {
+        return Collections.unmodifiableMap(patterns);
+    }
+
     public Pattern matchPattern(OriginalRequest originalUrl) {
         Pattern found = patterns.values().stream()
                 .filter(pattern -> matchUrl(originalUrl.getMethod(), originalUrl.getUrl(), pattern))

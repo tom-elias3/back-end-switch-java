@@ -45,7 +45,7 @@ Patterns are loaded once at startup via `@PostConstruct` into a `TreeMap` (ascen
 **Expression operators:** `AND`, `OR`, `NOT`, `==`, `!=`, `<`, `<=`, `>`, `>=`. Each maps to a concrete `Expression` subclass with `boolean evaluate()`. `NOT` is a unary prefix operator and binds tighter than `AND`/`OR`. Numeric operators throw `RuntimeException` on unparseable values. `ExpressionParser` is fully static.
 
 **Package structure:**
-- `controller` — `DecisionController` — two endpoints: `POST /decide` (routing) and `POST /reload` (re-reads `routing.properties` at runtime; clears the pattern map first so removed patterns don't linger)
+- `controller` — `DecisionController` — three endpoints: `POST /decide` (routing), `POST /reload` (re-reads `routing.properties` at runtime; clears the pattern map first so removed patterns don't linger), `GET /patterns` (returns the live pattern map as JSON, ordered by id)
 - `service` — `DecisionService` (orchestration, pattern loading, URL/method matching, claim extraction, param extraction, logic evaluation)
 - `model` — `Pattern` (routing rule), `OriginalRequest` (`method`, `url`, `jsonPayload`, `headers`); both are Lombok `@Value` (immutable)
 - `expression` — `Expression` (abstract), `ValueExpression` (leaf), operator classes, `ExpressionParser`

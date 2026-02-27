@@ -4,6 +4,7 @@ import com.tom.backendswitch.model.OriginalRequest;
 import com.tom.backendswitch.model.Pattern;
 import com.tom.backendswitch.service.DecisionService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -35,5 +36,10 @@ public class DecisionController {
     @PostMapping(path = "/reload")
     public void reload() throws Exception {
         decisionService.init();
+    }
+
+    @GetMapping(path = "/patterns")
+    public Map<Integer, Pattern> getPatterns() {
+        return decisionService.getPatterns();
     }
 }
