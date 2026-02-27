@@ -24,8 +24,9 @@ public class DecisionService {
     private static final String URL = ".url";
     private static final String LOGIC = ".logic";
     private static final String DESTINATION = ".destination";
+    private static final String RANDOM = "RANDOM";
 
-    private static final Map<Integer, Pattern> patterns = new TreeMap<>();
+    private final Map<Integer, Pattern> patterns = new TreeMap<>();
 
     private static final BiPredicate<Properties, Integer> checkAllExist = (props, id) -> props.containsKey(PATTERN + id + METHOD)
             && props.containsKey(PATTERN + id + URL)
@@ -51,8 +52,21 @@ public class DecisionService {
         }
     }
 
-    public Map<String, String> extractClaims(String token) throws JsonProcessingException {
-        if(!token.startsWith("Bearer ")) {
+    public String handleRequest(OriginalRequest originalRequest, String token) throws JsonProcessingException {
+        Pattern pattern = this.matchPattern(originalRequest);
+        if(pattern != null) {
+            Map<String, Object> claims = this.extractClaims(token);
+            Map<String, String> params = this.extractRequestParams(originalRequest.getUrl());
+
+            String result = this.evaluateLogic(pattern, claims, params);
+            return result;
+        } else {
+            return null;
+        }
+    }
+
+    public Map<String, Object> extractClaims(String token) throws JsonProcessingException {
+        if(token == null || token.isBlank() || !token.startsWith("Bearer ")) {
             return Collections.emptyMap();
         }
 
@@ -61,7 +75,7 @@ public class DecisionService {
                 StandardCharsets.UTF_8
         );
 
-        Map<String, String> claims = new ObjectMapper().readValue(claimsJson, new TypeReference<Map<String, String>>() {});
+        Map<String, Object> claims = new ObjectMapper().readValue(claimsJson, new TypeReference<Map<String, Object>>() {});
         return claims;
     }
 
@@ -75,7 +89,7 @@ public class DecisionService {
             String[] queryParamTokens = queryParams.split("&");
             for(String param : queryParamTokens) {
                 if(param != null && !param.isBlank() && param.indexOf(equalsSign) > 0) {
-                    String[] tokens = param.split(equalsSign);
+                    String[] tokens = param.split(equalsSign, 2);
                     result.put(tokens[0], tokens[1]);
                 }
             }
@@ -85,9 +99,9 @@ public class DecisionService {
     }
 
     public Pattern matchPattern(OriginalRequest originalUrl) {
-        Pattern found = patterns.values().parallelStream()
+        Pattern found = patterns.values().stream()
                 .filter(pattern -> matchUrl(originalUrl.getMethod(), originalUrl.getUrl(), pattern))
-                .min(Comparator.comparingInt(Pattern::getId))
+                .findFirst()
                 .orElse(null);
         return found;
     }
@@ -115,12 +129,26 @@ public class DecisionService {
         return true;
     }
 
-    public String evaluateLogic(Pattern pattern, Map<String, String> claims, Map<String, String> params) {
+    public String evaluateLogic(Pattern pattern, Map<String, Object> claims, Map<String, String> params) {
+        if(pattern.getLogic().startsWith(RANDOM)) {
+            return this.probabilityDecision(pattern);
+        }
+
         Map<String, String> context = new HashMap<>();
-        claims.forEach((k, v) -> context.put("claim." + k, v));
+        claims.forEach((k, v) -> context.put("claim." + k, v.toString()));
         params.forEach((k, v) -> context.put("param." + k, v));
 
         boolean result = ExpressionParser.parse(pattern.getLogic(), context).evaluate();
         return result ? pattern.getDestination() : null;
+    }
+
+    private String probabilityDecision(Pattern pattern) {
+        int probability = Integer.parseInt(pattern.getLogic().split(":")[1]);
+        if (probability < 0 || probability > 100) throw new RuntimeException("Probability value must be between 0 and 100: " + probability);
+        if (probability == 100) return pattern.getDestination();
+        if (probability == 0) return null;
+
+        int random = new Random().nextInt(100);
+        return random < probability ? pattern.getDestination() : null;
     }
 }
