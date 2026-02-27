@@ -36,6 +36,7 @@ public class DecisionService {
 
     @PostConstruct
     public void init() throws Exception {
+        patterns.clear();
         try (InputStream is = getClass().getClassLoader().getResourceAsStream(ROUTING_PROPERTIES_FILE_NAME)) {
             Properties routingProperties = new Properties();
             routingProperties.load(is);

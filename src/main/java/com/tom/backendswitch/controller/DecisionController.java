@@ -31,4 +31,9 @@ public class DecisionController {
         response.setHeader(LOCATION, decision != null ? decision : originalRequest.getUrl());
         response.setStatus(HttpServletResponse.SC_TEMPORARY_REDIRECT);
     }
+
+    @PostMapping(path = "/reload")
+    public void reload() throws Exception {
+        decisionService.init();
+    }
 }
