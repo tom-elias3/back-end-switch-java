@@ -29,6 +29,11 @@ public class ExpressionParser {
             );
         }
 
+        // look for NOT expression
+        if (expressionTrim.startsWith("NOT ")) {
+            return new NotExpression(parse(expressionTrim.substring(4), context));
+        }
+
         // Order matters: check multi-char operators before single-char ones
         for (String op : new String[]{"<=", ">=", "==", "!=", "<", ">"}) {
             idx = expressionTrim.indexOf(op);
