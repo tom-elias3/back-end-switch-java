@@ -35,7 +35,11 @@ A Java/Spring Boot L7 traffic router — similar to Envoy/Kong/Traefik. Incoming
 Patterns are loaded once at startup via `@PostConstruct` into a `TreeMap` (ascending key order). Each pattern has: `method`, `url` (supports `*` wildcards), `logic`, and `destination`. Missing any of the 4 fields causes that pattern to be skipped. `matchPattern` uses `findFirst()` on the ordered stream — the lowest-id match wins and evaluation short-circuits immediately.
 
 **Logic types (evaluated in `evaluateLogic`):**
-- **Expression logic** — strings like `(({param.operation} <= 3) AND ({claim.iat} == 1516239022))`. Parsed by `ExpressionParser` into an `Expression` tree. Variables in `{...}` are resolved from a merged context map: JWT claims keyed as `claim.<name>` (deserialized as `Map<String, Object>`, `.toString()`'d into context), URL query params keyed as `param.<name>`, request headers keyed as `header.<name>`.
+- **Expression logic** — strings like `(({param.operation} <= 3) AND ({claim.iat} == 1516239022))`. Parsed by `ExpressionParser` into an `Expression` tree. Variables in `{...}` are resolved from a merged context map:
+  - `claim.<name>` — JWT claims (deserialized as `Map<String, Object>`, `.toString()`'d)
+  - `param.<name>` — URL query parameters
+  - `header.<name>` — request headers
+  - `payload.<A>.<B>.<C>` — fields from `jsonPayload` using dot-path notation for arbitrary nesting. Parsed **lazily**: `jsonPayload` is only deserialized if the logic string contains `{payload.`. Nested JSON objects are recursively flattened into the context (e.g. `{"user":{"role":"admin"}}` → `payload.user.role=admin`). Unparseable payload is silently ignored (payload keys remain absent from context).
 - **RANDOM logic** — logic string format: `RANDOM:<0-100>`. `probabilityDecision()` validates the value is in range, short-circuits for `100` (always route) and `0` (never route), otherwise generates `nextInt(100)` and returns the destination if `random < probability` (giving exactly `probability`% chance).
 
 **Expression operators:** `AND`, `OR`, `NOT`, `==`, `!=`, `<`, `<=`, `>`, `>=`. Each maps to a concrete `Expression` subclass with `boolean evaluate()`. `NOT` is a unary prefix operator and binds tighter than `AND`/`OR`. Numeric operators throw `RuntimeException` on unparseable values. `ExpressionParser` is fully static.

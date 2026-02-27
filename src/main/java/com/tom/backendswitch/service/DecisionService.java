@@ -61,7 +61,7 @@ public class DecisionService {
             Map<String, String> params = this.extractRequestParams(originalRequest.getUrl());
             Map<String, String> headers = originalRequest.getHeaders();
 
-            String result = this.evaluateLogic(pattern, claims, params, headers);
+            String result = this.evaluateLogic(pattern, claims, params, headers, originalRequest.getJsonPayload());
             return result;
         } else {
             return null;
@@ -137,7 +137,7 @@ public class DecisionService {
         return true;
     }
 
-    public String evaluateLogic(Pattern pattern, Map<String, Object> claims, Map<String, String> params, Map<String, String> headers) {
+    public String evaluateLogic(Pattern pattern, Map<String, Object> claims, Map<String, String> params, Map<String, String> headers, String jsonPayload) {
         if(pattern.getLogic().startsWith(RANDOM)) {
             return this.probabilityDecision(pattern);
         }
@@ -148,9 +148,29 @@ public class DecisionService {
         if (headers != null) {
             headers.forEach((k, v) -> context.put("header." + k, v));
         }
+        if (jsonPayload != null && pattern.getLogic().contains("{payload.")) {
+            try {
+                Map<String, Object> payload = new ObjectMapper().readValue(jsonPayload, new TypeReference<>() {});
+                flattenPayload(payload, "payload.", context);
+            } catch (JsonProcessingException e) {
+                // unparseable payload — payload.* keys remain absent from context
+            }
+        }
 
         boolean result = ExpressionParser.parse(pattern.getLogic(), context).evaluate();
         return result ? pattern.getDestination() : null;
+    }
+
+    @SuppressWarnings("unchecked")
+    private void flattenPayload(Map<String, Object> map, String prefix, Map<String, String> context) {
+        map.forEach((k, v) -> {
+            String key = prefix + k;
+            if (v instanceof Map) {
+                flattenPayload((Map<String, Object>) v, key + ".", context);
+            } else {
+                context.put(key, v != null ? v.toString() : null);
+            }
+        });
     }
 
     private String probabilityDecision(Pattern pattern) {
