@@ -1,0 +1,8 @@
+.git
+.gradle
+.idea
+src
+gradle
+gradlew
+gradlew.bat
+build/libs/*-plain.jar

@@ -20,6 +20,9 @@ A Java/Spring Boot L7 traffic router — similar to Envoy/Kong/Traefik. Incoming
 
 # Single test
 ./gradlew test --tests "com.tom.backendswitch.SomeTestClass"
+
+# Build JAR and Docker image
+./gradlew dockerBuild
 ```
 
 ## Architecture

@@ -35,3 +35,8 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 }
+
+tasks.register('dockerBuild', Exec) {
+	dependsOn bootJar
+	commandLine 'docker', 'build', '-t', 'backendswitch', '.'
+}
