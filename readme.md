@@ -114,3 +114,24 @@ pattern.5.logic=RANDOM:30
 # Single test class
 ./gradlew test --tests "com.tom.backendswitch.SomeTestClass"
 ```
+
+## Docker
+
+Build the JAR and Docker image in one step:
+
+```bash
+./gradlew dockerBuild
+```
+
+Or separately:
+
+```bash
+./gradlew bootJar
+docker build -t backendswitch .
+```
+
+Run the container:
+
+```bash
+docker run -p 8080:8080 backendswitch
+```
