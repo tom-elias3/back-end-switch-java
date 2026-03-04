@@ -3,7 +3,6 @@ package com.tom.backendswitch.controller;
 import com.tom.backendswitch.model.OriginalRequest;
 import com.tom.backendswitch.model.Pattern;
 import com.tom.backendswitch.service.DecisionService;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -19,7 +18,6 @@ public class DecisionController {
     private final DecisionService decisionService;
 
     private static final String JWT_HEADER = "Authorization";
-    public static final String LOCATION = "Location";
 
     public DecisionController(DecisionService decisionService) {
         this.decisionService = decisionService;
@@ -27,10 +25,7 @@ public class DecisionController {
 
     @PostMapping(path = "/decide")
     public void decide(@RequestHeader(JWT_HEADER) String token, @RequestBody OriginalRequest originalRequest, HttpServletResponse response) throws Exception {
-        String decision = decisionService.handleRequest(originalRequest, token);
-
-        response.setHeader(LOCATION, decision != null ? decision : originalRequest.getUrl());
-        response.setStatus(HttpServletResponse.SC_TEMPORARY_REDIRECT);
+        decisionService.handleRequest(originalRequest, token, response);
     }
 
     @PostMapping(path = "/reload")

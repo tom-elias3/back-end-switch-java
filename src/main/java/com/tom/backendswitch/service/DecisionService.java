@@ -3,14 +3,21 @@ package com.tom.backendswitch.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.tom.backendswitch.expression.ExpressionParser;
+import com.tom.backendswitch.model.Decision;
 import com.tom.backendswitch.model.OriginalRequest;
 import com.tom.backendswitch.model.Pattern;
+import com.tom.backendswitch.model.ResolutionType;
 import jakarta.annotation.PostConstruct;
+import jakarta.servlet.http.HttpServletResponse;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClient;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -25,7 +32,10 @@ public class DecisionService {
     private static final String URL = ".url";
     private static final String LOGIC = ".logic";
     private static final String DESTINATION = ".destination";
+    private static final String RESOLUTION = ".resolution";
     private static final String RANDOM = "RANDOM";
+
+    private static final RestClient REST_CLIENT = RestClient.create();
 
     private final Map<Integer, Pattern> patterns = new TreeMap<>();
 
@@ -44,27 +54,69 @@ public class DecisionService {
             routingProperties.stringPropertyNames().stream()
                     .map(key -> key.split("\\.")[1]).distinct().map(Integer::parseInt)
                     .filter(id -> checkAllExist.test(routingProperties, id))
-                    .forEach(id -> patterns.put(id, new Pattern(
-                        id,
-                        HttpMethod.valueOf(routingProperties.getProperty(PATTERN + id + METHOD)),
-                        routingProperties.getProperty(PATTERN + id + URL),
-                        routingProperties.getProperty(PATTERN + id + LOGIC),
-                        routingProperties.getProperty(PATTERN + id + DESTINATION)
-                    )));
+                    .forEach(id -> {
+                        String resolutionStr = routingProperties.getProperty(PATTERN + id + RESOLUTION);
+                        ResolutionType resolution;
+                        try {
+                            resolution = resolutionStr != null ? ResolutionType.valueOf(resolutionStr.toUpperCase()) : ResolutionType.REDIRECT;
+                        } catch (IllegalArgumentException e) {
+                            resolution = ResolutionType.REDIRECT;
+                        }
+                        patterns.put(id, new Pattern(
+                            id,
+                            HttpMethod.valueOf(routingProperties.getProperty(PATTERN + id + METHOD)),
+                            routingProperties.getProperty(PATTERN + id + URL),
+                            routingProperties.getProperty(PATTERN + id + LOGIC),
+                            routingProperties.getProperty(PATTERN + id + DESTINATION),
+                            resolution
+                        ));
+                    });
         }
     }
 
-    public String handleRequest(OriginalRequest originalRequest, String token) throws JsonProcessingException {
+    public void handleRequest(OriginalRequest originalRequest, String token, HttpServletResponse response) throws Exception {
         Pattern pattern = this.matchPattern(originalRequest);
-        if(pattern != null) {
+        Decision decision = null;
+        if (pattern != null) {
             Map<String, Object> claims = this.extractClaims(token);
             Map<String, String> params = this.extractRequestParams(originalRequest.getUrl());
             Map<String, String> headers = originalRequest.getHeaders();
+            String destination = this.evaluateLogic(pattern, claims, params, headers, originalRequest.getJsonPayload());
+            decision = destination != null ? new Decision(destination, pattern.getResolution()) : null;
+        }
 
-            String result = this.evaluateLogic(pattern, claims, params, headers, originalRequest.getJsonPayload());
-            return result;
+        if (decision != null && decision.resolution() == ResolutionType.FOLLOW) {
+            proxyRequest(originalRequest, token, decision.destination(), response);
         } else {
-            return null;
+            response.setHeader("Location", decision != null ? decision.destination() : originalRequest.getUrl());
+            response.setStatus(HttpServletResponse.SC_TEMPORARY_REDIRECT);
+        }
+    }
+
+    private void proxyRequest(OriginalRequest originalRequest, String token, String destination, HttpServletResponse response) throws IOException {
+        RestClient.RequestHeadersSpec<?> spec = REST_CLIENT.method(originalRequest.getMethod())
+            .uri(destination)
+            .headers(h -> {
+                if (originalRequest.getHeaders() != null) {
+                    originalRequest.getHeaders().forEach(h::add);
+                }
+                h.set("Authorization", token);
+            });
+
+        if (originalRequest.getJsonPayload() != null) {
+            spec = ((RestClient.RequestBodySpec) spec).body(originalRequest.getJsonPayload());
+        }
+
+        ResponseEntity<byte[]> upstream = spec.retrieve()
+            .onStatus(status -> true, (req, res) -> {})
+            .toEntity(byte[].class);
+
+        response.setStatus(upstream.getStatusCode().value());
+        upstream.getHeaders().forEach((name, values) ->
+            values.forEach(value -> response.addHeader(name, value))
+        );
+        if (upstream.getBody() != null) {
+            response.getOutputStream().write(upstream.getBody());
         }
     }
 

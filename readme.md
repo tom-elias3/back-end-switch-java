@@ -8,7 +8,10 @@ Similar to Envoy Proxy / Kong Gateway / Traefik / Istio or Linkerd — a special
 1. Client sends `POST /decide` with the original request metadata
 2. The service matches the request against configured patterns (by HTTP method and URL)
 3. If a match is found, the pattern's logic is evaluated using JWT claims, URL query params, request headers, and the request body
-4. The client is redirected (**307 Temporary Redirect**) to the destination URL, or back to the original URL if no pattern matches or the condition is false
+4. The outcome depends on the pattern's `resolution`:
+   - **`redirect`** (default) — client receives a **307 Temporary Redirect** to the destination
+   - **`follow`** — the service calls the destination itself and proxies the response back (status, headers, and body)
+   - No match or logic false — **307** back to the original URL
 
 ## API
 
@@ -31,7 +34,9 @@ Routes a request based on the configured patterns.
 }
 ```
 
-**Response:** `307 Temporary Redirect` with a `Location` header pointing to the matched destination, or the original URL if no pattern matched.
+**Response:**
+- `redirect` pattern (or no match): `307 Temporary Redirect` with a `Location` header
+- `follow` pattern: upstream status code, headers, and body proxied directly to the caller
 
 ---
 
@@ -49,18 +54,20 @@ Returns the currently loaded routing patterns as JSON, ordered by id.
 
 ## Routing configuration
 
-Patterns are defined in `src/main/resources/routing.properties`. Each pattern requires four fields:
+Patterns are defined in `src/main/resources/routing.properties`. `method`, `url`, `logic`, and `destination` are required; `resolution` is optional.
 
 ```properties
 pattern.<id>.method=GET
 pattern.<id>.url=https://*.example.com/api/*
 pattern.<id>.logic=({param.operation} > 3) AND ({claim.role} == admin)
 pattern.<id>.destination=https://backend-a.example.com
+pattern.<id>.resolution=follow
 ```
 
 - **`id`** — integer; lower id wins when multiple patterns match the same request (order matters — configure from more specific to less specific)
 - **`url`** — supports `*` wildcards
 - **`logic`** — expression string or `RANDOM:<0-100>`
+- **`resolution`** — `redirect` (default) or `follow`
 
 ### Logic: expressions
 
