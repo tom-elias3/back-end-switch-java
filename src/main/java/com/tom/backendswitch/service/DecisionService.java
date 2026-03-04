@@ -1,7 +1,6 @@
 package com.tom.backendswitch.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import com.tom.backendswitch.expression.ExpressionParser;
 import com.tom.backendswitch.model.Decision;
 import com.tom.backendswitch.model.OriginalRequest;
@@ -9,11 +8,13 @@ import com.tom.backendswitch.model.Pattern;
 import com.tom.backendswitch.model.ResolutionType;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletResponse;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
+
+import java.time.Duration;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -33,6 +34,7 @@ public class DecisionService {
     private static final String LOGIC = ".logic";
     private static final String DESTINATION = ".destination";
     private static final String RESOLUTION = ".resolution";
+    private static final String TIMEOUT = ".timeout";
     private static final String RANDOM = "RANDOM";
 
     private static final RestClient REST_CLIENT = RestClient.create();
@@ -62,13 +64,16 @@ public class DecisionService {
                         } catch (IllegalArgumentException e) {
                             resolution = ResolutionType.REDIRECT;
                         }
+                        String timeoutStr = routingProperties.getProperty(PATTERN + id + TIMEOUT);
+                        Integer timeout = timeoutStr != null ? Integer.parseInt(timeoutStr) : null;
                         patterns.put(id, new Pattern(
                             id,
                             HttpMethod.valueOf(routingProperties.getProperty(PATTERN + id + METHOD)),
                             routingProperties.getProperty(PATTERN + id + URL),
                             routingProperties.getProperty(PATTERN + id + LOGIC),
                             routingProperties.getProperty(PATTERN + id + DESTINATION),
-                            resolution
+                            resolution,
+                            timeout
                         ));
                     });
         }
@@ -86,15 +91,23 @@ public class DecisionService {
         }
 
         if (decision != null && decision.resolution() == ResolutionType.FOLLOW) {
-            proxyRequest(originalRequest, token, decision.destination(), response);
+            proxyRequest(originalRequest, token, decision.destination(), pattern.getTimeout(), response);
         } else {
             response.setHeader("Location", decision != null ? decision.destination() : originalRequest.getUrl());
             response.setStatus(HttpServletResponse.SC_TEMPORARY_REDIRECT);
         }
     }
 
-    private void proxyRequest(OriginalRequest originalRequest, String token, String destination, HttpServletResponse response) throws IOException {
-        RestClient.RequestHeadersSpec<?> spec = REST_CLIENT.method(originalRequest.getMethod())
+    private void proxyRequest(OriginalRequest originalRequest, String token, String destination, Integer timeout, HttpServletResponse response) throws IOException {
+        RestClient client = REST_CLIENT;
+        if (timeout != null) {
+            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+            factory.setReadTimeout(Duration.ofMillis(timeout));
+            factory.setConnectTimeout(Duration.ofMillis(timeout));
+            client = RestClient.builder().requestFactory(factory).build();
+        }
+
+        RestClient.RequestHeadersSpec<?> spec = client.method(originalRequest.getMethod())
             .uri(destination)
             .headers(h -> {
                 if (originalRequest.getHeaders() != null) {

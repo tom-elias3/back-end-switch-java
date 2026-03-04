@@ -38,10 +38,10 @@ Java 21, Spring Boot 3.4.3, Lombok `@Value` (immutable models). Docker image: `e
 4. `handleRequest` then writes the HTTP response directly:
    - **No match / logic false** → 307 to `originalRequest.url`
    - **`REDIRECT` resolution** → 307 to `decision.destination`
-   - **`FOLLOW` resolution** → `proxyRequest` calls the destination via `RestTemplate`, copies upstream status + headers + body back to the caller; 4xx/5xx propagated as-is
+   - **`FOLLOW` resolution** → `proxyRequest` calls the destination via `RestClient`, copies upstream status + headers + body back to the caller; 4xx/5xx propagated as-is. If the matched pattern has a `timeout`, a dedicated `RestClient` is built with that connect+read timeout (ms); otherwise the shared no-timeout instance is used.
 
 **Routing configuration (`src/main/resources/routing.properties`):**
-Patterns are loaded once at startup via `@PostConstruct` into a `TreeMap` (ascending key order). Each pattern has: `method`, `url` (supports `*` wildcards), `logic`, `destination`, and optionally `resolution`. Missing any of the first 4 fields causes that pattern to be skipped. `resolution` defaults to `REDIRECT` if absent or unrecognised. `matchPattern` uses `findFirst()` on the ordered stream — the lowest-id match wins and evaluation short-circuits immediately.
+Patterns are loaded once at startup via `@PostConstruct` into a `TreeMap` (ascending key order). Each pattern has: `method`, `url` (supports `*` wildcards), `logic`, `destination`, and optionally `resolution` and `timeout`. Missing any of the first 4 fields causes that pattern to be skipped. `resolution` defaults to `REDIRECT` if absent or unrecognised. `timeout` defaults to `null` (no timeout) if absent. `matchPattern` uses `findFirst()` on the ordered stream — the lowest-id match wins and evaluation short-circuits immediately.
 
 **Pattern fields:**
 ```
@@ -50,6 +50,7 @@ pattern.<id>.url=https://*.example.com/path?param=*
 pattern.<id>.logic=(({param.x} > 3) AND ({claim.iat} == 123))
 pattern.<id>.destination=https://upstream.host
 pattern.<id>.resolution=follow   # optional; redirect (default) or follow
+pattern.<id>.timeout=3000        # optional ms; connect+read timeout, only applied for follow
 ```
 
 **Logic types (evaluated in `evaluateLogic`):**
@@ -65,5 +66,5 @@ pattern.<id>.resolution=follow   # optional; redirect (default) or follow
 **Package structure:**
 - `controller` — `DecisionController` — three endpoints: `POST /decide` (single-line delegation to service), `POST /reload` (re-reads `routing.properties` at runtime; clears the pattern map first so removed patterns don't linger), `GET /patterns` (returns the live pattern map as JSON, ordered by id)
 - `service` — `DecisionService` — owns all routing logic AND response-writing: pattern loading, URL/method matching, claim extraction, param extraction, logic evaluation, redirect vs proxy decision
-- `model` — `Pattern` (routing rule with `id`, `method`, `url`, `logic`, `destination`, `resolution`), `OriginalRequest` (`method`, `url`, `jsonPayload`, `headers`), `Decision` (record wrapping `destination` + `resolution`), `ResolutionType` (enum: `REDIRECT`, `FOLLOW`); models are Lombok `@Value` (immutable) except `Decision` which is a Java record
+- `model` — `Pattern` (routing rule with `id`, `method`, `url`, `logic`, `destination`, `resolution`, `timeout`), `OriginalRequest` (`method`, `url`, `jsonPayload`, `headers`), `Decision` (record wrapping `destination` + `resolution`), `ResolutionType` (enum: `REDIRECT`, `FOLLOW`); models are Lombok `@Value` (immutable) except `Decision` which is a Java record
 - `expression` — `Expression` (abstract), `ValueExpression` (leaf), operator classes, `ExpressionParser`

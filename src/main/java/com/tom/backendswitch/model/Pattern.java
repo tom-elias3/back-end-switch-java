@@ -11,4 +11,5 @@ public class Pattern {
     String logic;
     String destination;
     ResolutionType resolution;
+    Integer timeout;
 }
