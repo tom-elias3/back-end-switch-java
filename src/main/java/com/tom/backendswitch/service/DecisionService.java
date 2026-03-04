@@ -66,6 +66,13 @@ public class DecisionService {
                         }
                         String timeoutStr = routingProperties.getProperty(PATTERN + id + TIMEOUT);
                         Integer timeout = timeoutStr != null ? Integer.parseInt(timeoutStr) : null;
+                        RestClient patternClient = null;
+                        if (resolution == ResolutionType.FOLLOW && timeout != null) {
+                            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+                            factory.setReadTimeout(Duration.ofMillis(timeout));
+                            factory.setConnectTimeout(Duration.ofMillis(timeout));
+                            patternClient = RestClient.builder().requestFactory(factory).build();
+                        }
                         patterns.put(id, new Pattern(
                             id,
                             HttpMethod.valueOf(routingProperties.getProperty(PATTERN + id + METHOD)),
@@ -73,7 +80,8 @@ public class DecisionService {
                             routingProperties.getProperty(PATTERN + id + LOGIC),
                             routingProperties.getProperty(PATTERN + id + DESTINATION),
                             resolution,
-                            timeout
+                            timeout,
+                            patternClient
                         ));
                     });
         }
@@ -91,22 +99,14 @@ public class DecisionService {
         }
 
         if (decision != null && decision.resolution() == ResolutionType.FOLLOW) {
-            proxyRequest(originalRequest, token, decision.destination(), pattern.getTimeout(), response);
+            proxyRequest(originalRequest, token, decision.destination(), pattern.getRestClient() != null ? pattern.getRestClient() : REST_CLIENT, response);
         } else {
             response.setHeader("Location", decision != null ? decision.destination() : originalRequest.getUrl());
             response.setStatus(HttpServletResponse.SC_TEMPORARY_REDIRECT);
         }
     }
 
-    private void proxyRequest(OriginalRequest originalRequest, String token, String destination, Integer timeout, HttpServletResponse response) throws IOException {
-        RestClient client = REST_CLIENT;
-        if (timeout != null) {
-            SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
-            factory.setReadTimeout(Duration.ofMillis(timeout));
-            factory.setConnectTimeout(Duration.ofMillis(timeout));
-            client = RestClient.builder().requestFactory(factory).build();
-        }
-
+    private void proxyRequest(OriginalRequest originalRequest, String token, String destination, RestClient client, HttpServletResponse response) throws IOException {
         RestClient.RequestHeadersSpec<?> spec = client.method(originalRequest.getMethod())
             .uri(destination)
             .headers(h -> {

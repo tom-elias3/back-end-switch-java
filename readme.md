@@ -54,7 +54,7 @@ Returns the currently loaded routing patterns as JSON, ordered by id.
 
 ## Routing configuration
 
-Patterns are defined in `src/main/resources/routing.properties`. `method`, `url`, `logic`, and `destination` are required; `resolution` is optional.
+Patterns are defined in `src/main/resources/routing.properties`. `method`, `url`, `logic`, and `destination` are required; `resolution` and `timeout` are optional.
 
 ```properties
 pattern.<id>.method=GET
@@ -62,12 +62,14 @@ pattern.<id>.url=https://*.example.com/api/*
 pattern.<id>.logic=({param.operation} > 3) AND ({claim.role} == admin)
 pattern.<id>.destination=https://backend-a.example.com
 pattern.<id>.resolution=follow
+pattern.<id>.timeout=3000
 ```
 
 - **`id`** — integer; lower id wins when multiple patterns match the same request (order matters — configure from more specific to less specific)
 - **`url`** — supports `*` wildcards
 - **`logic`** — expression string or `RANDOM:<0-100>`
 - **`resolution`** — `redirect` (default) or `follow`
+- **`timeout`** — milliseconds; applies connect and read timeout for `follow` patterns; omit for no timeout
 
 ### Logic: expressions
 
