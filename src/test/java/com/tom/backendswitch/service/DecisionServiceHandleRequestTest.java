@@ -20,7 +20,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Base64;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -115,7 +114,7 @@ class DecisionServiceHandleRequestTest {
                 """.formatted(upstreamUrl));
 
         OriginalRequest request = new OriginalRequest(HttpMethod.GET, "https://example.com/api", null, null);
-        service.handleRequest(request, BEARER_TOKEN, UUID.randomUUID(), response);
+        service.handleRequest(request, null, UUID.randomUUID(), response);
 
         verify(response).setStatus(200);
         verify(response, never()).setHeader(eq("Location"), anyString());
@@ -136,7 +135,7 @@ class DecisionServiceHandleRequestTest {
                 """.formatted(upstreamUrl));
 
         OriginalRequest request = new OriginalRequest(HttpMethod.GET, "https://example.com/api", null, null);
-        service.handleRequest(request, BEARER_TOKEN, UUID.randomUUID(), response);
+        service.handleRequest(request, null, UUID.randomUUID(), response);
 
         verify(response).setStatus(503);
     }
@@ -172,11 +171,6 @@ class DecisionServiceHandleRequestTest {
     }
 
     // --- helpers ---
-
-    /** A minimal but structurally valid Bearer JWT (header.payload.sig). */
-    private static final String BEARER_TOKEN = "Bearer eyJhbGciOiJub25lIn0."
-            + Base64.getUrlEncoder().withoutPadding().encodeToString("{}".getBytes())
-            + ".sig";
 
     private DecisionService serviceWith(String propertiesContent) throws Exception {
         Path file = tempDir.resolve("routing.properties");

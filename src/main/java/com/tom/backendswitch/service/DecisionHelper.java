@@ -22,7 +22,9 @@ public class DecisionHelper {
                     if (originalRequest.getHeaders() != null) {
                         originalRequest.getHeaders().forEach(h::add);
                     }
-                    h.set("Authorization", token);
+                    if(token != null) {
+                        h.set("Authorization", token);
+                    }
                 });
 
         if (originalRequest.getJsonPayload() != null) {

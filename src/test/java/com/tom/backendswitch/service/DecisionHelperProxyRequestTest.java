@@ -110,6 +110,16 @@ class DecisionHelperProxyRequestTest {
     }
 
     @Test
+    void nullTokenDoesNotSetAuthorizationHeader() throws IOException {
+        when(mockResponseSpec.toEntity(byte[].class)).thenReturn(ResponseEntity.ok(null));
+
+        DecisionHelper.proxyRequest(request(null, null), null, "https://dest", mockClient, mockResponse);
+
+        HttpHeaders captured = captureRequestHeaders();
+        assertThat(captured.getFirst("Authorization")).isNull();
+    }
+
+    @Test
     void forwardsRequestHeaders() throws IOException {
         when(mockResponseSpec.toEntity(byte[].class)).thenReturn(ResponseEntity.ok(null));
 
