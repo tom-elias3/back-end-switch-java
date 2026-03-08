@@ -1,6 +1,7 @@
 package com.tom.backendswitch.service;
 
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.io.TempDir;
@@ -23,9 +24,25 @@ class RoutingFileWatcherTest {
 
     private RoutingFileWatcher watcher;
 
+    @BeforeEach
+    void setUp() {
+        lenient().when(environment.getProperty("routing.file-watcher.enabled", Boolean.class, true)).thenReturn(true);
+    }
+
     @AfterEach
     void tearDown() {
         if (watcher != null) watcher.stop();
+    }
+
+    @Test
+    void watcherDisabledByPropertyDoesNothing() throws Exception {
+        when(environment.getProperty("routing.file-watcher.enabled", Boolean.class, true)).thenReturn(false);
+        watcher = new RoutingFileWatcher(environment, decisionService);
+
+        watcher.start();
+        Thread.sleep(100);
+
+        verify(decisionService, never()).init();
     }
 
     @Test

@@ -48,6 +48,18 @@ class DecisionHelperExtractClaimsTest {
         assertThat(DecisionHelper.extractClaims(token)).isEmpty();
     }
 
+    @Test
+    void tokenWithInvalidBase64ReturnsEmptyMap() {
+        String token = "Bearer header.not!!valid!!base64.sig";
+        assertThat(DecisionHelper.extractClaims(token)).isEmpty();
+    }
+
+    @Test
+    void tokenWithMissingPayloadPartReturnsEmptyMap() {
+        // Only one segment after "Bearer " — split(".")[1] would throw ArrayIndexOutOfBoundsException
+        assertThat(DecisionHelper.extractClaims("Bearer nodots")).isEmpty();
+    }
+
     // --- helpers ---
 
     /** Wraps a JSON string as the payload of a dummy JWT (header.payload.sig). */

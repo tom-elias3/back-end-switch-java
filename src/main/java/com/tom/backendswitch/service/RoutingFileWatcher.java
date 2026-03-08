@@ -23,6 +23,10 @@ public class RoutingFileWatcher {
 
     @PostConstruct
     public void start() {
+        if (!environment.getProperty("routing.file-watcher.enabled", Boolean.class, true)) {
+            log.debug("Routing file watcher is disabled");
+            return;
+        }
         String externalPath = environment.getProperty("routing.properties.path");
         if (externalPath == null) {
             return;

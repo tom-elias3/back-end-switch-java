@@ -56,7 +56,7 @@ public class DecisionHelper {
             Map<String, Object> claims = new ObjectMapper().readValue(claimsJson, new TypeReference<Map<String, Object>>() {
             });
             return claims;
-        } catch(JsonProcessingException jme) {
+        } catch(Exception e) {
             return Collections.emptyMap();
         }
     }

@@ -121,6 +121,8 @@ By default the service loads `routing.properties` from the classpath (baked into
 
 When `ROUTING_PROPERTIES_PATH` is set, the service also watches the file for changes and reloads automatically — no `POST /reload` needed. `POST /reload` still works on demand.
 
+To disable the file watcher (e.g. if your platform does not support `WatchService` reliably), set `ROUTING_FILE_WATCHER_ENABLED=false`.
+
 **Docker:**
 
 ```bash
