@@ -53,6 +53,12 @@ Returns the currently loaded routing patterns as JSON, ordered by id.
 
 ---
 
+### `GET /actuator/health`
+
+Returns service health status. Suitable for Kubernetes liveness and readiness probes.
+
+---
+
 ## Routing configuration
 
 Patterns are defined in `src/main/resources/routing.properties`. `method`, `url`, `logic`, and `destination` are required; `resolution` and `timeout` are optional.
@@ -113,7 +119,7 @@ pattern.5.logic=RANDOM:30
 
 By default the service loads `routing.properties` from the classpath (baked into the JAR). Set the `ROUTING_PROPERTIES_PATH` environment variable to point at an external file instead — useful for Docker volume mounts and Kubernetes ConfigMaps.
 
-`POST /reload` re-reads from the same path, so mounted-file updates take effect without a restart.
+When `ROUTING_PROPERTIES_PATH` is set, the service also watches the file for changes and reloads automatically — no `POST /reload` needed. `POST /reload` still works on demand.
 
 **Docker:**
 
