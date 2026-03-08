@@ -21,6 +21,7 @@ Routes a request based on the configured patterns.
 
 **Headers:**
 - `Authorization: Bearer <jwt>` — JWT whose claims are available in routing logic
+- `X-logging-level: trace` *(optional)* — elevates log verbosity for this request only (any valid level: `trace`, `debug`, `info`, `warn`, `error`)
 
 **Body:**
 ```json

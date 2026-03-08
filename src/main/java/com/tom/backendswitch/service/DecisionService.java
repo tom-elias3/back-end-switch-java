@@ -8,6 +8,7 @@ import com.tom.backendswitch.model.Pattern;
 import com.tom.backendswitch.model.ResolutionType;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -22,8 +23,10 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.UUID;
 import java.util.function.BiPredicate;
 
+@Slf4j
 @Service
 public class DecisionService {
 
@@ -49,6 +52,7 @@ public class DecisionService {
     @PostConstruct
     public void init() throws Exception {
         patterns.clear();
+        log.debug("Loading routing patterns from {}", ROUTING_PROPERTIES_FILE_NAME);
         try (InputStream is = getClass().getClassLoader().getResourceAsStream(ROUTING_PROPERTIES_FILE_NAME)) {
             Properties routingProperties = new Properties();
             routingProperties.load(is);
@@ -62,6 +66,7 @@ public class DecisionService {
                         try {
                             resolution = resolutionStr != null ? ResolutionType.valueOf(resolutionStr.toUpperCase()) : ResolutionType.REDIRECT;
                         } catch (IllegalArgumentException e) {
+                            log.warn("Pattern {}: unrecognised resolution '{}', defaulting to REDIRECT", id, resolutionStr);
                             resolution = ResolutionType.REDIRECT;
                         }
                         String timeoutStr = routingProperties.getProperty(PATTERN + id + TIMEOUT);
@@ -85,24 +90,32 @@ public class DecisionService {
                         ));
                     });
         }
+        log.info("Loaded {} routing pattern(s)", patterns.size());
     }
 
-    public void handleRequest(OriginalRequest originalRequest, String token, HttpServletResponse response) throws Exception {
+    public void handleRequest(OriginalRequest originalRequest, String token, UUID requestId, HttpServletResponse response) throws Exception {
         Pattern pattern = this.matchPattern(originalRequest);
+
         Decision decision = null;
         if (pattern != null) {
+            log.debug("[{}] request matched to pattern {}", requestId, pattern.getId());
             Map<String, Object> claims = this.extractClaims(token);
             Map<String, String> params = this.extractRequestParams(originalRequest.getUrl());
             Map<String, String> headers = originalRequest.getHeaders();
-            String destination = this.evaluateLogic(pattern, claims, params, headers, originalRequest.getJsonPayload());
+            String destination = this.evaluateLogic(pattern, claims, params, headers, originalRequest.getJsonPayload(), requestId);
             decision = destination != null ? new Decision(destination, pattern.getResolution()) : null;
+        } else {
+            log.debug("[{}] no pattern matched", requestId);
         }
 
         if (decision != null && decision.resolution() == ResolutionType.FOLLOW) {
+            log.debug("[{}] following request to {}", requestId, decision.destination());
             proxyRequest(originalRequest, token, decision.destination(), pattern.getRestClient() != null ? pattern.getRestClient() : REST_CLIENT, response);
         } else {
-            response.setHeader("Location", decision != null ? decision.destination() : originalRequest.getUrl());
+            String redirect = decision != null ? decision.destination() : originalRequest.getUrl();
+            response.setHeader("Location", redirect);
             response.setStatus(HttpServletResponse.SC_TEMPORARY_REDIRECT);
+            log.debug("[{}] redirecting request to {}", requestId, redirect);
         }
     }
 
@@ -206,8 +219,9 @@ public class DecisionService {
         return true;
     }
 
-    public String evaluateLogic(Pattern pattern, Map<String, Object> claims, Map<String, String> params, Map<String, String> headers, String jsonPayload) {
+    public String evaluateLogic(Pattern pattern, Map<String, Object> claims, Map<String, String> params, Map<String, String> headers, String jsonPayload, UUID requestId) {
         if(pattern.getLogic().startsWith(RANDOM)) {
+            log.trace("[{}] making random decision with pattern {}", requestId, pattern.getId());
             return this.probabilityDecision(pattern);
         }
 
@@ -222,10 +236,11 @@ public class DecisionService {
                 Map<String, Object> payload = new ObjectMapper().readValue(jsonPayload, new TypeReference<>() {});
                 flattenPayload(payload, "payload.", context);
             } catch (JsonProcessingException e) {
+                log.debug("[{}] could not parse JSON payload: {}", requestId, e.getLocalizedMessage());
                 // unparseable payload — payload.* keys remain absent from context
             }
         }
-
+        log.trace("[{}] request context values:\n {}", requestId, context);
         boolean result = ExpressionParser.parse(pattern.getLogic(), context).evaluate();
         return result ? pattern.getDestination() : null;
     }

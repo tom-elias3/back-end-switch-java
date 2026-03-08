@@ -33,7 +33,7 @@ Java 21, Spring Boot 3.4.3, Lombok `@Value` (immutable models). Docker image: `e
 
 **Request flow:**
 1. Client sends `POST /decide` with an `Authorization: Bearer <jwt>` header and an `OriginalRequest` JSON body (`method`, `url`, `jsonPayload`, `headers`)
-2. `DecisionController.decide` delegates entirely to `DecisionService.handleRequest(originalRequest, token, response)` — the controller is a pure delegation layer
+2. `DecisionController.decide` optionally sets an MDC key from the `X-logging-level` header (see *Per-request log level* below), then delegates to `DecisionService.handleRequest(originalRequest, token, uuid, response)`, removing the MDC key in a `finally` block — the controller is otherwise a pure delegation layer
 3. `handleRequest` orchestrates: `matchPattern` → if match found, `extractClaims` + `extractRequestParams` + `evaluateLogic` → wraps result in a `Decision(destination, resolution)`
 4. `handleRequest` then writes the HTTP response directly:
    - **No match / logic false** → 307 to `originalRequest.url`
@@ -64,7 +64,11 @@ pattern.<id>.timeout=3000        # optional ms; connect+read timeout, only appli
 **Expression operators:** `AND`, `OR`, `NOT`, `==`, `!=`, `<`, `<=`, `>`, `>=`. Each maps to a concrete `Expression` subclass with `boolean evaluate()`. `NOT` is a unary prefix operator. Numeric operators throw `RuntimeException` on unparseable values. `ExpressionParser` is fully static. Missing context keys throw `RuntimeException` at evaluation time.
 
 **Package structure:**
-- `controller` — `DecisionController` — three endpoints: `POST /decide` (single-line delegation to service), `POST /reload` (re-reads `routing.properties` at runtime; clears the pattern map first so removed patterns don't linger), `GET /patterns` (returns the live pattern map as JSON, ordered by id)
+- `controller` — `DecisionController` — three endpoints: `POST /decide` (MDC setup + delegation to service), `POST /reload` (re-reads `routing.properties` at runtime; clears the pattern map first so removed patterns don't linger), `GET /patterns` (returns the live pattern map as JSON, ordered by id)
 - `service` — `DecisionService` — owns all routing logic AND response-writing: pattern loading, URL/method matching, claim extraction, param extraction, logic evaluation, redirect vs proxy decision
-- `model` — `Pattern` (routing rule with `id`, `method`, `url`, `logic`, `destination`, `resolution`, `timeout`), `OriginalRequest` (`method`, `url`, `jsonPayload`, `headers`), `Decision` (record wrapping `destination` + `resolution`), `ResolutionType` (enum: `REDIRECT`, `FOLLOW`); models are Lombok `@Value` (immutable) except `Decision` which is a Java record
+- `model` — `Pattern` (routing rule with `id`, `method`, `url`, `logic`, `destination`, `resolution`, `timeout`, `restClient` — pre-built `RestClient` for FOLLOW+timeout patterns, `@JsonIgnore`d from `/patterns` output), `OriginalRequest` (`method`, `url`, `jsonPayload`, `headers`), `Decision` (record wrapping `destination` + `resolution`), `ResolutionType` (enum: `REDIRECT`, `FOLLOW`); models are Lombok `@Value` (immutable) except `Decision` which is a Java record
 - `expression` — `Expression` (abstract), `ValueExpression` (leaf), operator classes, `ExpressionParser`
+- `logging` — `RequestLevelTurboFilter` (Logback `TurboFilter` that reads MDC key `requestLevel` and overrides the effective log level per-request), `LoggingConfig` (`@Configuration` that registers the filter into the `LoggerContext` at startup via `@PostConstruct`)
+
+**Per-request log level override:**
+Send `X-logging-level: trace` (or any valid Logback level) on a `/decide` request to elevate logging for that request only. The controller writes the normalised level into MDC under key `requestLevel`; `RequestLevelTurboFilter` intercepts Logback's level check before the global effective-level gate, so TRACE events suppressed globally will appear for that thread only. Concurrent requests are unaffected (MDC is thread-local). Unknown level strings are treated as NEUTRAL (no override).
