@@ -9,6 +9,7 @@ import com.tom.backendswitch.model.ResolutionType;
 import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -19,6 +20,7 @@ import java.time.Duration;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -42,7 +44,12 @@ public class DecisionService {
 
     private static final RestClient REST_CLIENT = RestClient.create();
 
+    private final Environment environment;
     private final Map<Integer, Pattern> patterns = new TreeMap<>();
+
+    public DecisionService(Environment environment) {
+        this.environment = environment;
+    }
 
     private static final BiPredicate<Properties, Integer> checkAllExist = (props, id) -> props.containsKey(PATTERN + id + METHOD)
             && props.containsKey(PATTERN + id + URL)
@@ -52,10 +59,18 @@ public class DecisionService {
     @PostConstruct
     public void init() throws Exception {
         patterns.clear();
-        log.debug("Loading routing patterns from {}", ROUTING_PROPERTIES_FILE_NAME);
-        try (InputStream is = getClass().getClassLoader().getResourceAsStream(ROUTING_PROPERTIES_FILE_NAME)) {
+        String externalPath = environment.getProperty("routing.properties.path");
+        InputStream is;
+        if (externalPath != null) {
+            log.debug("Loading routing patterns from external path: {}", externalPath);
+            is = new FileInputStream(externalPath);
+        } else {
+            log.debug("Loading routing patterns from classpath: {}", ROUTING_PROPERTIES_FILE_NAME);
+            is = getClass().getClassLoader().getResourceAsStream(ROUTING_PROPERTIES_FILE_NAME);
+        }
+        try (InputStream stream = is) {
             Properties routingProperties = new Properties();
-            routingProperties.load(is);
+            routingProperties.load(stream);
 
             routingProperties.stringPropertyNames().stream()
                     .map(key -> key.split("\\.")[1]).distinct().map(Integer::parseInt)

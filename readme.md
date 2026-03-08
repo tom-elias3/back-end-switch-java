@@ -109,6 +109,49 @@ pattern.5.logic=RANDOM:30
 
 `RANDOM:100` always routes. `RANDOM:0` never routes.
 
+## External routing configuration
+
+By default the service loads `routing.properties` from the classpath (baked into the JAR). Set the `ROUTING_PROPERTIES_PATH` environment variable to point at an external file instead — useful for Docker volume mounts and Kubernetes ConfigMaps.
+
+`POST /reload` re-reads from the same path, so mounted-file updates take effect without a restart.
+
+**Docker:**
+
+```bash
+docker run -p 8080:8080 \
+  -e ROUTING_PROPERTIES_PATH=/etc/config/routing.properties \
+  -v ./routing.properties:/etc/config/routing.properties \
+  backendswitch
+```
+
+**Kubernetes ConfigMap (mounted as file):**
+
+```yaml
+# ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backendswitch-routing
+data:
+  routing.properties: |
+    pattern.1.method=GET
+    pattern.1.url=https://*.example.com/api/*
+    pattern.1.logic=({param.operation} > 3)
+    pattern.1.destination=https://backend-a.example.com
+
+# Deployment env + volumeMount
+env:
+  - name: ROUTING_PROPERTIES_PATH
+    value: /etc/config/routing.properties
+volumeMounts:
+  - name: routing-config
+    mountPath: /etc/config
+volumes:
+  - name: routing-config
+    configMap:
+      name: backendswitch-routing
+```
+
 ## Building and running
 
 ```bash
