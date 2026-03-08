@@ -127,8 +127,8 @@ public class DecisionService {
         Decision decision = null;
         if (pattern != null) {
             log.debug("[{}] request matched to pattern {}", requestId, pattern.getId());
-            Map<String, Object> claims = this.extractClaims(token);
-            Map<String, String> params = this.extractRequestParams(originalRequest.getUrl());
+            Map<String, Object> claims = DecisionHelper.extractClaims(token);
+            Map<String, String> params = DecisionHelper.extractRequestParams(originalRequest.getUrl());
             Map<String, String> headers = originalRequest.getHeaders();
             String destination = this.evaluateLogic(pattern, claims, params, headers, originalRequest.getJsonPayload(), requestId);
             decision = destination != null ? new Decision(destination, pattern.getResolution()) : null;
@@ -138,78 +138,13 @@ public class DecisionService {
 
         if (decision != null && decision.resolution() == ResolutionType.FOLLOW) {
             log.debug("[{}] following request to {}", requestId, decision.destination());
-            proxyRequest(originalRequest, token, decision.destination(), pattern.getRestClient() != null ? pattern.getRestClient() : REST_CLIENT, response);
+            DecisionHelper.proxyRequest(originalRequest, token, decision.destination(), pattern.getRestClient() != null ? pattern.getRestClient() : REST_CLIENT, response);
         } else {
             String redirect = decision != null ? decision.destination() : originalRequest.getUrl();
             response.setHeader("Location", redirect);
             response.setStatus(HttpServletResponse.SC_TEMPORARY_REDIRECT);
             log.debug("[{}] redirecting request to {}", requestId, redirect);
         }
-    }
-
-    private void proxyRequest(OriginalRequest originalRequest, String token, String destination, RestClient client, HttpServletResponse response) throws IOException {
-        RestClient.RequestHeadersSpec<?> spec = client.method(originalRequest.getMethod())
-            .uri(destination)
-            .headers(h -> {
-                if (originalRequest.getHeaders() != null) {
-                    originalRequest.getHeaders().forEach(h::add);
-                }
-                h.set("Authorization", token);
-            });
-
-        if (originalRequest.getJsonPayload() != null) {
-            spec = ((RestClient.RequestBodySpec) spec).body(originalRequest.getJsonPayload());
-        }
-
-        ResponseEntity<byte[]> upstream = spec.retrieve()
-            .onStatus(status -> true, (req, res) -> {})
-            .toEntity(byte[].class);
-
-        response.setStatus(upstream.getStatusCode().value());
-        upstream.getHeaders().forEach((name, values) ->
-            values.forEach(value -> response.addHeader(name, value))
-        );
-        if (upstream.getBody() != null) {
-            response.getOutputStream().write(upstream.getBody());
-        }
-    }
-
-    public Map<String, Object> extractClaims(String token) {
-        if(token == null || token.isBlank() || !token.startsWith("Bearer ")) {
-            return Collections.emptyMap();
-        }
-
-        try {
-            String claimsJson = new String(
-                    Base64.getUrlDecoder().decode(token.split("\\.")[1]),
-                    StandardCharsets.UTF_8
-            );
-
-            Map<String, Object> claims = new ObjectMapper().readValue(claimsJson, new TypeReference<Map<String, Object>>() {
-            });
-            return claims;
-        } catch(JsonProcessingException jme) {
-            return Collections.emptyMap();
-        }
-    }
-
-    public Map<String, String> extractRequestParams(String url) {
-        final String qmark = "?";
-        final String equalsSign = "=";
-        Map<String, String> result = new HashMap<>();
-
-        if(url != null && !url.isBlank() && url.indexOf(qmark) > 0) {
-            String queryParams = url.substring(url.indexOf(qmark) + 1);
-            String[] queryParamTokens = queryParams.split("&");
-            for(String param : queryParamTokens) {
-                if(param != null && !param.isBlank() && param.indexOf(equalsSign) > 0) {
-                    String[] tokens = param.split(equalsSign, 2);
-                    result.put(tokens[0], tokens[1]);
-                }
-            }
-        }
-
-        return result;
     }
 
     public Map<Integer, Pattern> getPatterns() {
@@ -220,7 +155,7 @@ public class DecisionService {
         mutex.readLock().lock();
         try {
             Pattern found = patterns.values().stream()
-                    .filter(pattern -> matchUrl(originalUrl.getMethod(), originalUrl.getUrl(), pattern))
+                    .filter(pattern -> DecisionHelper.matchUrl(originalUrl.getMethod(), originalUrl.getUrl(), pattern))
                     .findFirst()
                     .orElse(null);
             return found;
@@ -229,33 +164,10 @@ public class DecisionService {
         }
     }
 
-    private boolean matchUrl(HttpMethod method, String url, Pattern pattern) {
-        if(!method.equals(pattern.getMethod())) return false;
-
-        String[] tokens = pattern.getUrl().split("\\*");
-        String remaining = url;
-        for (int i=0; i < tokens.length; i++) {
-            if (!remaining.startsWith(tokens[i])) {
-                return false;
-            }
-
-            if(i+1 < tokens.length) {
-                int foundIndex = remaining.indexOf(tokens[i+1]);
-                if(foundIndex > -1) {
-                    remaining = remaining.substring(foundIndex);
-                } else {
-                    return false;
-                }
-            }
-        }
-
-        return true;
-    }
-
     public String evaluateLogic(Pattern pattern, Map<String, Object> claims, Map<String, String> params, Map<String, String> headers, String jsonPayload, UUID requestId) {
         if(pattern.getLogic().startsWith(RANDOM)) {
             log.trace("[{}] making random decision with pattern {}", requestId, pattern.getId());
-            return this.probabilityDecision(pattern);
+            return DecisionHelper.probabilityDecision(pattern);
         }
 
         Map<String, String> context = new HashMap<>();
@@ -267,7 +179,7 @@ public class DecisionService {
         if (jsonPayload != null && pattern.getLogic().contains("{payload.")) {
             try {
                 Map<String, Object> payload = new ObjectMapper().readValue(jsonPayload, new TypeReference<>() {});
-                flattenPayload(payload, "payload.", context);
+                DecisionHelper.flattenPayload(payload, "payload.", context);
             } catch (JsonProcessingException e) {
                 log.debug("[{}] could not parse JSON payload: {}", requestId, e.getLocalizedMessage());
                 // unparseable payload — payload.* keys remain absent from context
@@ -282,27 +194,5 @@ public class DecisionService {
         }
 
         return null;
-    }
-
-    @SuppressWarnings("unchecked")
-    private void flattenPayload(Map<String, Object> map, String prefix, Map<String, String> context) {
-        map.forEach((k, v) -> {
-            String key = prefix + k;
-            if (v instanceof Map) {
-                flattenPayload((Map<String, Object>) v, key + ".", context);
-            } else {
-                context.put(key, v != null ? v.toString() : null);
-            }
-        });
-    }
-
-    private String probabilityDecision(Pattern pattern) {
-        int probability = Integer.parseInt(pattern.getLogic().split(":")[1]);
-        if (probability < 0 || probability > 100) throw new RuntimeException("Probability value must be between 0 and 100: " + probability);
-        if (probability == 100) return pattern.getDestination();
-        if (probability == 0) return null;
-
-        int random = new Random().nextInt(100);
-        return random < probability ? pattern.getDestination() : null;
     }
 }
