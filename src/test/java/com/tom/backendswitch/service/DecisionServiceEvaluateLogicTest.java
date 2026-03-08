@@ -10,7 +10,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 
-import java.util.Collections;
 import java.util.Map;
 import java.util.UUID;
 

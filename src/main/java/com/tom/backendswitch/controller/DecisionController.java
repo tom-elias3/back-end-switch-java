@@ -4,14 +4,10 @@ import com.tom.backendswitch.logging.RequestLevelTurboFilter;
 import com.tom.backendswitch.model.OriginalRequest;
 import com.tom.backendswitch.model.Pattern;
 import com.tom.backendswitch.service.DecisionService;
-import org.slf4j.MDC;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RestController;
-
 import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.MDC;
+import org.springframework.web.bind.annotation.*;
+
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
