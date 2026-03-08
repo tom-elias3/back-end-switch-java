@@ -26,6 +26,8 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.UUID;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.function.BiPredicate;
 
 @Slf4j
@@ -46,6 +48,7 @@ public class DecisionService {
 
     private final Environment environment;
     private final Map<Integer, Pattern> patterns = new TreeMap<>();
+    private final ReadWriteLock mutex = new ReentrantReadWriteLock();
 
     public DecisionService(Environment environment) {
         this.environment = environment;
@@ -58,7 +61,6 @@ public class DecisionService {
 
     @PostConstruct
     public void init() throws Exception {
-        patterns.clear();
         String externalPath = environment.getProperty("routing.properties.path");
         InputStream is;
         if (externalPath != null) {
@@ -67,8 +69,16 @@ public class DecisionService {
         } else {
             log.debug("Loading routing patterns from classpath: {}", ROUTING_PROPERTIES_FILE_NAME);
             is = getClass().getClassLoader().getResourceAsStream(ROUTING_PROPERTIES_FILE_NAME);
+            if(is == null) {
+                log.debug("no external routing file set, and default routing.properties cannot be found.");
+                return;
+            }
         }
+
         try (InputStream stream = is) {
+            mutex.writeLock().lock();
+            patterns.clear();
+
             Properties routingProperties = new Properties();
             routingProperties.load(stream);
 
@@ -104,6 +114,9 @@ public class DecisionService {
                             patternClient
                         ));
                     });
+        }
+        finally {
+            mutex.writeLock().unlock();
         }
         log.info("Loaded {} routing pattern(s)", patterns.size());
     }
@@ -204,11 +217,16 @@ public class DecisionService {
     }
 
     public Pattern matchPattern(OriginalRequest originalUrl) {
-        Pattern found = patterns.values().stream()
-                .filter(pattern -> matchUrl(originalUrl.getMethod(), originalUrl.getUrl(), pattern))
-                .findFirst()
-                .orElse(null);
-        return found;
+        mutex.readLock().lock();
+        try {
+            Pattern found = patterns.values().stream()
+                    .filter(pattern -> matchUrl(originalUrl.getMethod(), originalUrl.getUrl(), pattern))
+                    .findFirst()
+                    .orElse(null);
+            return found;
+        } finally {
+            mutex.readLock().unlock();
+        }
     }
 
     private boolean matchUrl(HttpMethod method, String url, Pattern pattern) {
@@ -256,8 +274,14 @@ public class DecisionService {
             }
         }
         log.trace("[{}] request context values:\n {}", requestId, context);
-        boolean result = ExpressionParser.parse(pattern.getLogic(), context).evaluate();
-        return result ? pattern.getDestination() : null;
+        try {
+            boolean result = ExpressionParser.parse(pattern.getLogic(), context).evaluate();
+            return result ? pattern.getDestination() : null;
+        } catch (Exception e) {
+            log.debug("[{}] failed making decision: {}", requestId, e.getLocalizedMessage());
+        }
+
+        return null;
     }
 
     @SuppressWarnings("unchecked")
