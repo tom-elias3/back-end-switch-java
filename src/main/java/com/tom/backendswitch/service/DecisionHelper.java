@@ -84,8 +84,12 @@ public class DecisionHelper {
         if(!method.equals(pattern.getMethod())) return false;
 
         String[] tokens = pattern.getUrl().split("\\*");
+        boolean trailingWildcard = pattern.getUrl().endsWith("*");
         String remaining = url;
         for (int i=0; i < tokens.length; i++) {
+            if(i == tokens.length - 1 && !trailingWildcard && !remaining.equals(tokens[i])) {
+                return false;
+            }
             if (!remaining.startsWith(tokens[i])) {
                 return false;
             }
